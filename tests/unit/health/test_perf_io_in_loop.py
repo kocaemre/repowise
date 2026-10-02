@@ -23,6 +23,7 @@ from repowise.core.analysis.health.biomarkers.string_concat_in_loop import (
     StringConcatInLoopDetector,
 )
 from repowise.core.analysis.health.complexity import PerfHit, walk_file
+from repowise.core.analysis.health.perf.io_boundaries import collect_io_names
 from repowise.core.analysis.health.scoring import score_file
 
 _FIXTURE_DIR = Path(__file__).resolve().parents[2] / "fixtures" / "lang_samples"
@@ -365,6 +366,27 @@ def test_a_use_block_naming_two_io_modules_takes_the_first(use_block, expected):
     fc = walk_file("t.rs", "rust", use_block + b"fn f() {}\n")
     assert fc.io_boundary_names
     assert set(fc.io_boundary_names.values()) == {expected}
+
+
+class _FakeImportNode:
+    def __init__(self, node_type: str, text: bytes, children: list[_FakeImportNode] | None = None):
+        self.type = node_type
+        self.text = text
+        self.children = children or []
+
+
+def test_rust_local_use_paths_are_not_io_boundaries():
+    root = _FakeImportNode(
+        "source_file",
+        b"",
+        [
+            _FakeImportNode("use_declaration", b"use crate::request::Foo;"),
+            _FakeImportNode("use_declaration", b"use super::http::fetch;"),
+            _FakeImportNode("use_declaration", b"use self::fs::helper;"),
+        ],
+    )
+
+    assert collect_io_names(root, "rust") == {}
 
 
 def test_typescript_fixture_counts():
